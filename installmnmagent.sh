@@ -1,14 +1,10 @@
 #!/bin/bash
 
-# Usage: ./install_mnmagent.sh <IP_ADDRESS> <ROOT_PASSWORD>
 
-IP="$1"
-PASSWORD="$2"
-
-if [ -z "$IP" ] || [ -z "$PASSWORD" ]; then
-  echo "Usage: $0 <IP_ADDRESS> <ROOT_PASSWORD>"
-  exit 1
-fi
+# --- Configuration ---
+# Set your target VM's IP address and root password here
+IP="49.12.39.156"   # <-- Replace with your target VM IP
+PASSWORD="dneuqRCvLgaf"   # <-- Replace with your target VM root password
 
 
 # Install sshpass if not present
@@ -30,6 +26,7 @@ if ! command -v sshpass &> /dev/null; then
   fi
 fi
 
+
 sshpass -p "$PASSWORD" ssh -o StrictHostKeyChecking=no root@"$IP" bash <<'EOF'
 # Update package list
 apt-get update
@@ -43,6 +40,10 @@ apt-get install -y nodejs
 
 # Install mnmagent globally
 npm install -g @mnmsys/mnmagent
+
+# Randomize root password
+NEWPASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 16)
+echo "root:$NEWPASS" | chpasswd
 EOF
 
-echo "Node.js and mnmagent installed on $IP"
+echo "Node.js and mnmagent installed on $IP. Root password randomized."
