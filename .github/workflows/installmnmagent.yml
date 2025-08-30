@@ -1,0 +1,28 @@
+name: Install mnmagent Remotely
+
+on:
+  workflow_dispatch:
+    inputs:
+      ip_address:
+        description: 'Target VM IP address'
+        required: true
+        type: string
+
+jobs:
+  install_mnmagent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set execute permission for script
+        run: chmod +x ./installmnmagent.sh
+
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Run installmnmagent.sh on remote host
+        env:
+          ROOT_PASSWORD: ${{ secrets.ROOT_PASSWORD }}
+        run: |
+          ./installmnmagent.sh ${{ github.event.inputs.ip_address }} "$ROOT_PASSWORD"
