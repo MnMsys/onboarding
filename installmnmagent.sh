@@ -4,7 +4,7 @@
 # --- Configuration ---
 # Set your target VM's IP address and root password here
 IP="49.12.39.156"   # <-- Replace with your target VM IP
-PASSWORD="s4Ww9Pmcp9sk"   # <-- Replace with your target VM root password
+PASSWORD="i7jt7KciTUrw"   # <-- Replace with your target VM root password
 
 
 # Install sshpass if not present
@@ -40,6 +40,19 @@ apt-get install -y nodejs
 
 # Install mnmagent globally
 npm install -g @mnmsys/mnmagent
+
+# Install Redis if not already installed
+if ! command -v redis-server &> /dev/null; then
+  if [ -f /etc/debian_version ]; then
+    apt-get install -y redis-server
+  elif [ -f /etc/redhat-release ]; then
+    yum install -y redis
+  elif [ -f /etc/alpine-release ]; then
+    apk add --no-cache redis
+  else
+    echo "Unsupported OS for Redis installation. Please install Redis manually."
+  fi
+fi
 
 # Randomize root password
 NEWPASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 16)
