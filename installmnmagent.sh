@@ -4,7 +4,7 @@
 # --- Configuration ---
 # Set your target VM's IP address and root password here
 IP="49.12.39.156"   # <-- Replace with your target VM IP
-PASSWORD="bcqJA4CbKXCq"   # <-- Replace with your target VM root password
+PASSWORD="udmFFNTTMi7K"   # <-- Replace with your target VM root password
 
 
 # Install sshpass if not present
@@ -38,8 +38,10 @@ apt-get install -y curl
 curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
 apt-get install -y nodejs
 
-# Install mnmagent globally
-npm install -g @mnmsys/mnmagent
+# Install mnmagent globally with verbose logging
+echo "Installing mnmagent..."
+npm install -g @mnmsys/mnmagent --verbose
+echo "mnmagent installation completed."
 
 # Install Redis if not already installed
 if ! command -v redis-server &> /dev/null; then
