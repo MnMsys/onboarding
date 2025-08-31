@@ -4,7 +4,7 @@
 # --- Configuration ---
 # Set your target VM's IP address and root password here
 IP="49.12.39.156"   # <-- Replace with your target VM IP
-PASSWORD="4gLbEpJdqHhh"   # <-- Replace with your target VM root password
+PASSWORD="9qhCpu3wiPNM"   # <-- Replace with your target VM root password
 
 
 # Install sshpass if not present
