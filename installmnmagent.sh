@@ -4,7 +4,7 @@
 # --- Configuration ---
 # Set your target VM's IP address and root password here
 IP="49.12.39.156"   # <-- Replace with your target VM IP
-PASSWORD="LA7tXag7jPsp"   # <-- Replace with your target VM root password
+PASSWORD="XTfgUgXT9cCf"   # <-- Replace with your target VM root password
 
 
 # Install sshpass if not present
@@ -26,6 +26,16 @@ if ! command -v sshpass &> /dev/null; then
   fi
 fi
 
+
+# Test SSH connection first
+echo "Testing SSH connection to $IP..."
+if ! sshpass -p "$PASSWORD" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@"$IP" "echo 'SSH connection successful'"; then
+  echo "ERROR: Failed to establish SSH connection to $IP"
+  echo "Please check the IP address and password"
+  exit 1
+fi
+
+echo "SSH connection successful. Proceeding with installation..."
 
 sshpass -p "$PASSWORD" ssh -o StrictHostKeyChecking=no root@"$IP" bash <<'EOF'
 # Update package list
