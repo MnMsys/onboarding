@@ -1,51 +1,48 @@
 
 # Onboarding Scripts
 
-This repository contains scripts to automate the installation of Node.js and the `mnmagent` package on remote Linux machines. These scripts are designed to simplify onboarding and agent deployment for new or freshly provisioned VMs.
+Provisions the MnMs Agent host stack — `mnms-hostd` and `mnms-vaultd` (root, immutable)
+plus `mnms-agent-supervisor` (rootless launcher) — on a fresh Linux VM. Builds release
+binaries from the sibling `mnms-agent` checkout and installs them via
+`mnms-scripts/install-agent.sh`, which also creates the `mnms-agent` system user and
+the systemd units.
+
+Run these from a MnMs workspace checkout (so `../mnms-agent` and `../mnms-scripts`
+exist next to this repo).
 
 ## Scripts
 
 ### 1. `installmnmagent.sh`
-A Bash script to remotely install Node.js and `mnmagent` on a Linux VM using SSH and password authentication.
+Bash, for Linux/macOS.
 
-#### Features
-- Installs `sshpass` automatically if not present (supports Debian/Ubuntu, RedHat/CentOS, Alpine Linux).
-- Connects to the remote host using SSH with the provided root password.
-- Installs Node.js (LTS) and `mnmagent` globally via npm on the remote machine.
-
-#### Usage
 ```sh
-./installmnmagent.sh <IP_ADDRESS> <ROOT_PASSWORD>
+./installmnmagent.sh <ip> [--user root] [--key ~/.ssh/id_ed25519]
 ```
-- `<IP_ADDRESS>`: The IP address of the remote Linux VM.
-- `<ROOT_PASSWORD>`: The root password for the remote VM.
 
-#### Requirements
-- Run this script from a Linux machine with Bash.
-- The remote VM must be accessible via SSH as root.
-- The script will attempt to install `sshpass` if it is not already installed.
+### 2. `installmnmagent.ps1`
+PowerShell, for Windows (uses OpenSSH, not a third-party SSH module).
 
-### 2. `Install-MnmAgent.ps1`
-A PowerShell script to perform the same installation from a Windows environment.
-
-#### Features
-- Uses the `Posh-SSH` PowerShell module to connect to the remote Linux host.
-- Installs Node.js (LTS) and `mnmagent` globally via npm on the remote machine.
-
-#### Usage
 ```powershell
-./Install-MnmAgent.ps1 -IpAddress <IP_ADDRESS> -RootPassword <ROOT_PASSWORD>
+.\installmnmagent.ps1 -IpAddress <ip> [-SshUser root] [-KeyPath ~\.ssh\id_ed25519]
 ```
-- `<IP_ADDRESS>`: The IP address of the remote Linux VM.
-- `<ROOT_PASSWORD>`: The root password for the remote VM.
 
-#### Requirements
-- Windows PowerShell 5.1 or later.
-- Internet access to install the `Posh-SSH` module if not already present.
+## Auth
 
-## Security Note
-- These scripts require the root password for the remote machine. Use with caution and only on trusted networks.
-- Consider using SSH keys for improved security in production environments.
+Both scripts are **SSH key-based** — neither accepts a password as a parameter or
+hardcodes one. Configure an SSH key or agent identity on the target VM before running
+these (e.g. via your VM provider's cloud-init / key injection at creation time).
+
+## What gets installed
+
+See `mnms-scripts/install-agent.sh` and `mnms-agent/README.md` for the resulting
+service topology: `mnms-hostd`/`mnms-vaultd` (root) never run a shell or arbitrary
+exec on the caller's behalf — only typed, allowlisted operations — and are the only
+things on the host running as root. Everything else, including the Agent runtime
+itself, runs rootless.
+
+The Agent runtime container needs a Podman image (`MNMS_RUNTIME_IMAGE`) by default;
+for a host without a registry yet, override with `MNMS_RUNTIME_DEV_BINARY` to run the
+copied `mnms-agent-runtime` binary directly instead (see `mnms-agent/README.md`).
 
 ## License
 See [LICENSE](LICENSE) for details.

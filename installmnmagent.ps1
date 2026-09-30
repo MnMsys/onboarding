@@ -1,38 +1,72 @@
-# Usage: .\Install-MnmAgent.ps1 -IpAddress <IP_ADDRESS> -RootPassword <ROOT_PASSWORD>
+# Provisions the MnMs Agent host stack (mnms-hostd, mnms-vaultd, mnms-agent-supervisor)
+# on a fresh Linux VM from Windows, via OpenSSH (not Posh-SSH/password auth).
+#
+# Usage: .\installmnmagent.ps1 -IpAddress <IP> [-SshUser root] [-KeyPath <path>]
+#
+# Auth is SSH key-based. No password is accepted as a parameter (visible in shell
+# history / process listings) — configure an SSH key or agent identity first.
 
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
     [string]$IpAddress,
-    [Parameter(Mandatory=$true)]
-    [string]$RootPassword
+    [string]$SshUser = "root",
+    [string]$KeyPath = ""
 )
 
-# Install Posh-SSH if not present
-if (-not (Get-Module -ListAvailable -Name Posh-SSH)) {
-    Write-Host "Installing Posh-SSH module..."
-    Install-Module -Name Posh-SSH -Force -Scope CurrentUser
+$ErrorActionPreference = "Stop"
+
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+$AgentDir = Join-Path $RepoRoot "mnms-agent"
+$ScriptsDir = Join-Path $RepoRoot "mnms-scripts"
+
+foreach ($d in @($AgentDir, $ScriptsDir)) {
+    if (-not (Test-Path $d)) {
+        throw "expected sibling checkout at $d (run from a MnMs workspace checkout, next to mnms-agent and mnms-scripts)"
+    }
 }
 
-Import-Module Posh-SSH
+$sshArgs = @("-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10")
+if ($KeyPath) { $sshArgs += @("-i", $KeyPath) }
 
-# Create SSH session
-$sshSession = New-SSHSession -ComputerName $IpAddress -Credential (New-Object System.Management.Automation.PSCredential("root", (ConvertTo-SecureString $RootPassword -AsPlainText -Force))) -AcceptKey
+Write-Host "Building release binaries (mnms-hostd, mnms-vaultd, mnms-agent-supervisor, mnms-agent-runtime)..."
+Push-Location $AgentDir
+try {
+    cargo build --release -p mnms-agent-supervisor -p mnms-agent-runtime -p mnms-hostd
+    if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
+} finally {
+    Pop-Location
+}
 
-# Commands to run on remote Linux machine
-$commands = @(
-    "apt-get update",
-    "apt-get install -y curl",
-    "curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -",
-    "apt-get install -y nodejs",
-    "npm install -g @mnmsys/mnmagent"
+Write-Host "Testing SSH connection to $IpAddress..."
+& ssh @sshArgs "$SshUser@$IpAddress" "echo SSH connection successful"
+if ($LASTEXITCODE -ne 0) { throw "SSH connection failed" }
+
+Write-Host "Copying binaries and install script to $IpAddress..."
+$releaseDir = Join-Path $AgentDir "target\release"
+$files = @(
+    (Join-Path $releaseDir "mnms-hostd"),
+    (Join-Path $releaseDir "mnms-vaultd"),
+    (Join-Path $releaseDir "mnms-agent-supervisor"),
+    (Join-Path $releaseDir "mnms-agent-runtime"),
+    (Join-Path $ScriptsDir "install-agent.sh")
 )
+& scp @sshArgs $files "${SshUser}@${IpAddress}:/tmp/"
+if ($LASTEXITCODE -ne 0) { throw "scp failed" }
 
-foreach ($cmd in $commands) {
-    $output = Invoke-SSHCommand -SessionId $sshSession.SessionId -Command $cmd
-    Write-Host $output.Output
-}
+Write-Host "Installing on $IpAddress..."
+$remoteScript = @'
+set -euo pipefail
+sudo mkdir -p /usr/local/bin
+sudo install -m 755 /tmp/mnms-hostd /tmp/mnms-vaultd /tmp/mnms-agent-supervisor /tmp/mnms-agent-runtime /usr/local/bin/
+chmod +x /tmp/install-agent.sh
+sudo bash /tmp/install-agent.sh
+rm -f /tmp/mnms-hostd /tmp/mnms-vaultd /tmp/mnms-agent-supervisor /tmp/mnms-agent-runtime /tmp/install-agent.sh
+'@
+& ssh @sshArgs "$SshUser@$IpAddress" $remoteScript
+if ($LASTEXITCODE -ne 0) { throw "remote install failed" }
 
-# Close SSH session
-Remove-SSHSession -SessionId $sshSession.SessionId
-
-Write-Host "Node.js and mnmagent installed on $IpAddress"
+Write-Host "Agent host stack installed on $IpAddress."
+Write-Host "Note: install-agent.sh's mnms-agent-supervisor.service expects a Podman OCI image"
+Write-Host "(MNMS_RUNTIME_IMAGE) by default. For a bare VM without a registry yet, set"
+Write-Host "MNMS_RUNTIME_DEV_BINARY=/usr/local/bin/mnms-agent-runtime in an override instead;"
+Write-Host "see mnms-agent/README.md."
