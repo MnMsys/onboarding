@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Provisions the MnMs Agent host stack (mnms-hostd, mnms-vaultd, mnms-agent-supervisor)
 # on a fresh Linux VM: builds release binaries from the sibling mnms-agent checkout,
-# copies them plus mnms-scripts/install-agent.sh to the target host, and runs it there.
+# copies them plus the mnms-scripts set (install-agent.sh and the provisioning scripts it
+# installs for mnms-hostd) to the target host, and runs the installer there.
 #
 # Auth is SSH key-based by default. No credentials are hardcoded or accepted as
 # command-line arguments (arguments are visible in shell history and `ps`).
@@ -50,13 +51,20 @@ echo "Building release binaries (mnms-hostd, mnms-vaultd, mnms-agent-supervisor,
 echo "Testing SSH connection to $IP..."
 ssh "${SSH_OPTS[@]}" "${SSH_USER}@${IP}" "echo SSH connection successful"
 
-echo "Copying binaries and install script to $IP..."
+# install-agent.sh installs the provisioning scripts mnms-hostd runs (tenant users, app databases)
+# and needs them next to it, so the whole mnms-scripts set travels as one archive.
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
+COPYFILE_DISABLE=1 tar czf "$STAGE/mnms-scripts.tgz" --exclude=.git --exclude=lab --exclude=tests --exclude=docs \
+  -C "$SCRIPTS_DIR" .
+
+echo "Copying binaries and mnms-scripts to $IP..."
 scp "${SSH_OPTS[@]}" \
   "$AGENT_DIR/target/release/mnms-hostd" \
   "$AGENT_DIR/target/release/mnms-vaultd" \
   "$AGENT_DIR/target/release/mnms-agent-supervisor" \
   "$AGENT_DIR/target/release/mnms-agent-runtime" \
-  "$SCRIPTS_DIR/install-agent.sh" \
+  "$STAGE/mnms-scripts.tgz" \
   "${SSH_USER}@${IP}:/tmp/"
 
 echo "Installing on $IP..."
@@ -64,9 +72,11 @@ ssh "${SSH_OPTS[@]}" "${SSH_USER}@${IP}" bash <<'REMOTE'
 set -euo pipefail
 sudo mkdir -p /usr/local/bin
 sudo install -m 755 /tmp/mnms-hostd /tmp/mnms-vaultd /tmp/mnms-agent-supervisor /tmp/mnms-agent-runtime /usr/local/bin/
-chmod +x /tmp/install-agent.sh
-sudo bash /tmp/install-agent.sh
-rm -f /tmp/mnms-hostd /tmp/mnms-vaultd /tmp/mnms-agent-supervisor /tmp/mnms-agent-runtime /tmp/install-agent.sh
+rm -rf /tmp/mnms-scripts && mkdir -p /tmp/mnms-scripts
+tar xzf /tmp/mnms-scripts.tgz -C /tmp/mnms-scripts
+sudo bash /tmp/mnms-scripts/install-agent.sh
+rm -rf /tmp/mnms-scripts /tmp/mnms-scripts.tgz
+rm -f /tmp/mnms-hostd /tmp/mnms-vaultd /tmp/mnms-agent-supervisor /tmp/mnms-agent-runtime
 REMOTE
 
 echo "Agent host stack installed on $IP."
