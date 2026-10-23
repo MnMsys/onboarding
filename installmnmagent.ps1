@@ -41,16 +41,25 @@ Write-Host "Testing SSH connection to $IpAddress..."
 & ssh @sshArgs "$SshUser@$IpAddress" "echo SSH connection successful"
 if ($LASTEXITCODE -ne 0) { throw "SSH connection failed" }
 
-Write-Host "Copying binaries and install script to $IpAddress..."
+# install-agent.sh installs the provisioning scripts mnms-hostd runs (tenant users, app databases)
+# and needs them next to it, so the whole mnms-scripts set travels as one archive.
+$stage = Join-Path ([System.IO.Path]::GetTempPath()) ("mnms-scripts-" + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $stage | Out-Null
+$archive = Join-Path $stage "mnms-scripts.tgz"
+& tar.exe -czf $archive --exclude=.git --exclude=lab --exclude=tests --exclude=docs -C $ScriptsDir .
+if ($LASTEXITCODE -ne 0) { throw "tar failed (Windows 10+ ships tar.exe)" }
+
+Write-Host "Copying binaries and mnms-scripts to $IpAddress..."
 $releaseDir = Join-Path $AgentDir "target\release"
 $files = @(
     (Join-Path $releaseDir "mnms-hostd"),
     (Join-Path $releaseDir "mnms-vaultd"),
     (Join-Path $releaseDir "mnms-agent-supervisor"),
     (Join-Path $releaseDir "mnms-agent-runtime"),
-    (Join-Path $ScriptsDir "install-agent.sh")
+    $archive
 )
 & scp @sshArgs $files "${SshUser}@${IpAddress}:/tmp/"
+Remove-Item -Recurse -Force $stage
 if ($LASTEXITCODE -ne 0) { throw "scp failed" }
 
 Write-Host "Installing on $IpAddress..."
@@ -58,9 +67,11 @@ $remoteScript = @'
 set -euo pipefail
 sudo mkdir -p /usr/local/bin
 sudo install -m 755 /tmp/mnms-hostd /tmp/mnms-vaultd /tmp/mnms-agent-supervisor /tmp/mnms-agent-runtime /usr/local/bin/
-chmod +x /tmp/install-agent.sh
-sudo bash /tmp/install-agent.sh
-rm -f /tmp/mnms-hostd /tmp/mnms-vaultd /tmp/mnms-agent-supervisor /tmp/mnms-agent-runtime /tmp/install-agent.sh
+rm -rf /tmp/mnms-scripts && mkdir -p /tmp/mnms-scripts
+tar xzf /tmp/mnms-scripts.tgz -C /tmp/mnms-scripts
+sudo bash /tmp/mnms-scripts/install-agent.sh
+rm -rf /tmp/mnms-scripts /tmp/mnms-scripts.tgz
+rm -f /tmp/mnms-hostd /tmp/mnms-vaultd /tmp/mnms-agent-supervisor /tmp/mnms-agent-runtime
 '@
 & ssh @sshArgs "$SshUser@$IpAddress" $remoteScript
 if ($LASTEXITCODE -ne 0) { throw "remote install failed" }

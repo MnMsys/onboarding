@@ -5,7 +5,9 @@ Provisions the MnMs Agent host stack — `mnms-hostd` and `mnms-vaultd` (root, i
 plus `mnms-agent-supervisor` (rootless launcher) — on a fresh Linux VM. Builds release
 binaries from the sibling `mnms-agent` checkout and installs them via
 `mnms-scripts/install-agent.sh`, which also creates the `mnms-agent` system user and
-the systemd units.
+the systemd units. The whole `mnms-scripts` set is copied to the host with it: the installer
+puts the provisioning scripts `mnms-hostd` runs (tenant users, app databases) into
+`/usr/local/lib/mnms` and aborts before changing anything if any are missing.
 
 Run these from a MnMs workspace checkout (so `../mnms-agent` and `../mnms-scripts`
 exist next to this repo).
