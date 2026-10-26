@@ -30,20 +30,36 @@ Getting the files: the host owner runs `mnm host keygen --name <host>`, sends
 `host-license-request.json` to MnMs and receives `host-license.json`, then runs
 `mnm host sign-task-key --task-key "$(mnms-manager task-key)"` and `mnm host trust-bundle`.
 
+## The host's mTLS certificate
+
+For now one host serves all tenants, and its servers share **one** mTLS certificate, made by hand
+(ADR-0027 §2c, lead 2026-10-26). HAProxy's platform entrance (port 9443, rendered by
+mnms-haproxy-adapter) accepts only clients presenting a certificate from the Host CA.
+
+```sh
+./make-host-mtls.sh ca   pki <host-name>                       # Host CA: pki/host-ca.key stays offline
+./make-host-mtls.sh cert pki mnms-servers <dns-or-ip> ...      # the shared certificate + its key
+./make-host-mtls.sh embed pki installmnmagent.sh installmnmagent.ps1   # writes in the two certificates
+```
+
+The scripts carry only the two **certificates** (public). The certificate's private key
+`pki/mnms-mtls.key` is passed at onboarding (`--mtls-key` / `-MtlsKey`); it is checked against the
+hardcoded certificate and installed root-only in `/etc/mnms/pki` on the machine. Never commit it.
+
 ## Scripts
 
 ### 1. `installmnmagent.sh`
 Bash, for Linux/macOS.
 
 ```sh
-./installmnmagent.sh <ip> --trust host-trust.json [--machine-id <ip>] [--user root] [--key ~/.ssh/id_ed25519]
+./installmnmagent.sh <ip> --trust host-trust.json --mtls-key pki/mnms-mtls.key [--machine-id <ip>] [--user root] [--key ~/.ssh/id_ed25519]
 ```
 
 ### 2. `installmnmagent.ps1`
 PowerShell, for Windows (uses OpenSSH, not a third-party SSH module).
 
 ```powershell
-.\installmnmagent.ps1 -IpAddress <ip> -TrustBundle host-trust.json [-MachineId <ip>] [-SshUser root] [-KeyPath ~\.ssh\id_ed25519]
+.\installmnmagent.ps1 -IpAddress <ip> -TrustBundle host-trust.json -MtlsKey pki\mnms-mtls.key [-MachineId <ip>] [-SshUser root] [-KeyPath ~\.ssh\id_ed25519]
 ```
 
 `--machine-id` / `-MachineId` is the machine's IP as the Manager sees it (default: the target address).
