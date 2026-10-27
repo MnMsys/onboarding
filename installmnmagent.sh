@@ -21,8 +21,9 @@ MTLS_CERT_PEM='REPLACE: make-host-mtls.sh embed <dir> installmnmagent.sh'
 
 usage() {
   cat >&2 <<'EOF'
-Usage: installmnmagent.sh <ip> --trust host-trust.json --mtls-key mnms-mtls.key [--machine-id IP]
-                          [--user USER] [--key PATH]
+Usage: installmnmagent.sh <ip> --trust host-trust.json --mtls-key mnms-mtls.key
+                          --managers-json managers.json --manager-cert manager.crt
+                          [--machine-id IP] [--user USER] [--key PATH]
 
   <ip>          Target VM address.
   --trust PATH  The host trust bundle (`mnm host trust-bundle`): the host's MnMs license and its
@@ -30,6 +31,11 @@ Usage: installmnmagent.sh <ip> --trust host-trust.json --mtls-key mnms-mtls.key 
   --mtls-key PATH  The private key of the host's shared mTLS certificate (from make-host-mtls.sh).
                 It must match the certificate hardcoded in this script; it is copied to the
                 machine (root-only) and never stored anywhere else.
+  --managers-json PATH  Where the Agent finds its Managers: the manager pool (`mnm pool show manager`)
+                as {"generation": N, "slots": [{"id", "endpoint": {"ipv4", "ipv6", "hostname"}}]}.
+  --manager-cert PATH  The Manager's QUIC certificate the Agent pins (the Manager exports it to
+                MNMS_MANAGER_CERT_EXPORT_PATH, e.g. /var/lib/mnms-manager/export/manager.crt).
+                Both replace whatever a previous install left on the machine.
   --machine-id  The machine's IP as the Manager sees it (default: <ip>).
   --user USER   SSH user (default: root).
   --key PATH    SSH private key. If omitted, falls back to your ssh-agent /
@@ -45,11 +51,15 @@ SSH_USER="root"
 KEY=""
 TRUST=""
 MTLS_KEY=""
+MANAGERS_JSON=""
+MANAGER_CERT=""
 MACHINE_ID="$IP"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --trust) TRUST="${2:?}"; shift 2 ;;
     --mtls-key) MTLS_KEY="${2:?}"; shift 2 ;;
+    --managers-json) MANAGERS_JSON="${2:?}"; shift 2 ;;
+    --manager-cert) MANAGER_CERT="${2:?}"; shift 2 ;;
     --machine-id) MACHINE_ID="${2:?}"; shift 2 ;;
     --key) KEY="${2:?}"; shift 2 ;;
     --user) SSH_USER="${2:?}"; shift 2 ;;
@@ -91,6 +101,26 @@ openssl x509 -in "$STAGE/mnms-mtls.crt" -noout -checkend 0 >/dev/null \
   || { echo "ERROR: $MTLS_KEY is not the private key of the hardcoded mTLS certificate" >&2; exit 1; }
 echo "mTLS certificate verified: $(openssl x509 -in "$STAGE/mnms-mtls.crt" -noout -subject), valid until $(openssl x509 -in "$STAGE/mnms-mtls.crt" -noout -enddate | cut -d= -f2)"
 
+# Where the Agent finds its Managers and which certificate it pins (field test F19: a previous
+# install's files were silently kept, pointing the new Agent at the wrong Manager).
+[[ -n "$MANAGERS_JSON" && -f "$MANAGERS_JSON" ]] || { echo "ERROR: --managers-json <file> is required (the manager pool, see --help)" >&2; usage; }
+[[ -n "$MANAGER_CERT" && -f "$MANAGER_CERT" ]] || { echo "ERROR: --manager-cert <file> is required (the Manager's exported QUIC certificate)" >&2; usage; }
+python3 -I - "$MANAGERS_JSON" <<'PY' || exit 1
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    slots = d["slots"]
+    assert isinstance(d["generation"], int) and d["generation"] >= 1 and slots
+    live = [s for s in slots if any((s.get("endpoint") or {}).get(k) for k in ("ipv4", "ipv6", "hostname"))]
+    assert live, "no slot has an address"
+except Exception as e:
+    sys.exit(f"ERROR: {sys.argv[1]} is not a manager membership document ({e})")
+print(f"managers: generation {d['generation']}, {len(live)} reachable of {len(slots)} slot(s)")
+PY
+openssl x509 -in "$MANAGER_CERT" -noout -checkend 0 >/dev/null 2>&1 \
+  || { echo "ERROR: $MANAGER_CERT is not a valid, unexpired certificate" >&2; exit 1; }
+cp "$MANAGERS_JSON" "$STAGE/managers.json"; cp "$MANAGER_CERT" "$STAGE/manager.crt"
+
 for d in "$AGENT_DIR" "$HOST_DIR" "$SCRIPTS_DIR"; do
   [[ -d "$d" ]] || { echo "ERROR: expected sibling checkout at $d (run from a MnMs workspace checkout, next to mnms-agent, mnms-host and mnms-scripts)" >&2; exit 1; }
 done
@@ -118,6 +148,7 @@ scp "${SSH_OPTS[@]}" \
   "$STAGE/mnms-scripts.tgz" \
   "$STAGE/mnms-host-files.tgz" \
   "$STAGE/host-ca.crt" "$STAGE/mnms-mtls.crt" "$STAGE/mnms-mtls.key" \
+  "$STAGE/managers.json" "$STAGE/manager.crt" \
   "$TRUST" \
   "${SSH_USER}@${IP}:/tmp/"
 TRUST_NAME="$(basename "$TRUST")"
@@ -128,6 +159,11 @@ ssh "${SSH_OPTS[@]}" "${SSH_USER}@${IP}" bash -s -- "$MACHINE_ID" "$TRUST_NAME" 
 set -euo pipefail
 MACHINE_ID="$1" TRUST_NAME="$2"
 sudo mkdir -p /usr/local/bin
+# Where the Agent finds its Managers, before the installer decides whether to enable the supervisor.
+sudo install -d -m 0755 /mnm/identity
+sudo install -m 0644 -o root -g root /tmp/manager.crt /mnm/identity/manager.crt
+sudo install -m 0644 /tmp/managers.json /mnm/identity/managers.json
+rm -f /tmp/manager.crt /tmp/managers.json
 sudo install -m 755 /tmp/mnms-vaultd /tmp/mnms-agent-supervisor /tmp/mnms-agent-runtime /usr/local/bin/
 rm -rf /tmp/mnms-scripts /tmp/mnms-host-files && mkdir -p /tmp/mnms-scripts /tmp/mnms-host-files
 tar xzf /tmp/mnms-scripts.tgz -C /tmp/mnms-scripts

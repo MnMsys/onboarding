@@ -52,14 +52,15 @@ hardcoded certificate and installed root-only in `/etc/mnms/pki` on the machine.
 Bash, for Linux/macOS.
 
 ```sh
-./installmnmagent.sh <ip> --trust host-trust.json --mtls-key pki/mnms-mtls.key [--machine-id <ip>] [--user root] [--key ~/.ssh/id_ed25519]
+./installmnmagent.sh <ip> --trust host-trust.json --mtls-key pki/mnms-mtls.key \
+    --managers-json managers.json --manager-cert manager.crt [--machine-id <ip>] [--user root] [--key ~/.ssh/id_ed25519]
 ```
 
 ### 2. `installmnmagent.ps1`
 PowerShell, for Windows (uses OpenSSH, not a third-party SSH module).
 
 ```powershell
-.\installmnmagent.ps1 -IpAddress <ip> -TrustBundle host-trust.json -MtlsKey pki\mnms-mtls.key [-MachineId <ip>] [-SshUser root] [-KeyPath ~\.ssh\id_ed25519]
+.\installmnmagent.ps1 -IpAddress <ip> -TrustBundle host-trust.json -MtlsKey pki\mnms-mtls.key -ManagersJson managers.json -ManagerCert manager.crt [-MachineId <ip>] [-SshUser root] [-KeyPath ~\.ssh\id_ed25519]
 ```
 
 `--machine-id` / `-MachineId` is the machine's IP as the Manager sees it (default: the target address).

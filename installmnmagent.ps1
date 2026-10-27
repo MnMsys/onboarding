@@ -21,6 +21,10 @@ param(
     [string]$TrustBundle,
     [Parameter(Mandatory = $true)]
     [string]$MtlsKey,
+    [Parameter(Mandatory = $true)]
+    [string]$ManagersJson,
+    [Parameter(Mandatory = $true)]
+    [string]$ManagerCert,
     [string]$MachineId = "",
     [string]$SshUser = "root",
     [string]$KeyPath = ""
@@ -37,6 +41,11 @@ if ($HostCaCertPem.StartsWith("REPLACE") -or $MtlsCertPem.StartsWith("REPLACE"))
 }
 if (-not (Test-Path $TrustBundle)) { throw "-TrustBundle $TrustBundle does not exist" }
 if (-not (Test-Path $MtlsKey)) { throw "-MtlsKey $MtlsKey does not exist" }
+# Where the Agent finds its Managers and the certificate it pins (field test F19).
+if (-not (Test-Path $ManagersJson)) { throw "-ManagersJson $ManagersJson does not exist" }
+if (-not (Test-Path $ManagerCert)) { throw "-ManagerCert $ManagerCert does not exist" }
+$membership = Get-Content -Raw $ManagersJson | ConvertFrom-Json
+if (-not $membership.generation -or -not $membership.slots) { throw "-ManagersJson is not a manager membership document (generation, slots)" }
 # These values end up in remote command lines: allow only an IP address and a plain file name.
 if ($MachineId -notmatch '^[0-9A-Fa-f.:]+$') { throw "-MachineId must be an IP address" }
 $trustName = Split-Path -Leaf $TrustBundle
@@ -73,6 +82,10 @@ try {
     & scp @sshArgs $Verifier $TrustBundle (Join-Path $stage "host-ca.crt") (Join-Path $stage "mnms-mtls.crt") "${target}:$R/"
     if ($LASTEXITCODE -ne 0) { throw "scp failed" }
     & scp @sshArgs $MtlsKey "${target}:$R/mnms-mtls.key"
+    if ($LASTEXITCODE -ne 0) { throw "scp failed" }
+    & scp @sshArgs $ManagersJson "${target}:$R/managers.json"
+    if ($LASTEXITCODE -ne 0) { throw "scp failed" }
+    & scp @sshArgs $ManagerCert "${target}:$R/manager.crt"
     if ($LASTEXITCODE -ne 0) { throw "scp failed" }
     $checks = @'
 set -euo pipefail
@@ -134,6 +147,9 @@ echo "mTLS certificate verified: $(openssl x509 -in "$R/mnms-mtls.crt" -noout -s
 set -euo pipefail
 R="$1" MACHINE_ID="$2" TRUST_NAME="$3"
 sudo mkdir -p /usr/local/bin
+sudo install -d -m 0755 /mnm/identity
+sudo install -m 0644 -o root -g root "$R/manager.crt" /mnm/identity/manager.crt
+sudo install -m 0644 "$R/managers.json" /mnm/identity/managers.json
 sudo install -m 755 "$R/mnms-vaultd" "$R/mnms-agent-supervisor" "$R/mnms-agent-runtime" /usr/local/bin/
 mkdir -p "$R/mnms-scripts" "$R/mnms-host-files"
 tar xzf "$R/mnms-scripts.tgz" -C "$R/mnms-scripts"
