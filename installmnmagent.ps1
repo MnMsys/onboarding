@@ -146,7 +146,8 @@ sudo MNMS_HOST_BIN="$R/mnms-host" MNMS_HOST_TRUST_BUNDLE="$R/$TRUST_NAME" MNMS_M
 sudo install -d -m 0755 -o root -g root /etc/mnms/pki
 sudo install -m 0644 -o root -g root "$R/host-ca.crt" "$R/mnms-mtls.crt" /etc/mnms/pki/
 sudo install -m 0600 -o root -g root "$R/mnms-mtls.key" /etc/mnms/pki/mnms-mtls.key
-GRP=root; getent group haproxy >/dev/null && GRP=haproxy
+# mnms-haproxy-adapter runs HAProxy as the Agent user (systemd/mnms-haproxy-adapter.service).
+GRP=mnms-agent
 sudo sh -c 'umask 077; cat /etc/mnms/pki/mnms-mtls.crt /etc/mnms/pki/mnms-mtls.key >/etc/mnms/pki/mnms-mtls.pem'
 sudo chgrp "$GRP" /etc/mnms/pki/mnms-mtls.pem && sudo chmod 0640 /etc/mnms/pki/mnms-mtls.pem
 '@
