@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Static checks of every script, plus a smoke test of the host-side tools (make-host-mtls.sh,
+# verify-host-trust.sh) in a temp dir. The onboarding scripts themselves change a real host, so they
+# are only parsed and linted here.
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: bash -n
+        run: for f in *.sh .github/scripts/*.sh; do bash -n "$f"; done
+      - name: shellcheck
+        run: shellcheck *.sh .github/scripts/*.sh
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
+            Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          }
+          # Write-Host is what an interactive installer should use.
+          Invoke-ScriptAnalyzer -Path installmnmagent.ps1 -Severity Error,Warning `
+            -ExcludeRule PSAvoidUsingWriteHost -EnableExit
+      - name: Smoke test (make-host-mtls.sh, verify-host-trust.sh)
+        run: .github/scripts/smoke.sh
