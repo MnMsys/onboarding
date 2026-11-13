@@ -15,7 +15,7 @@
 set -euo pipefail
 
 MNMS_ROOT_PUBLIC_KEY_PEM='-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAID+6KdySbDw/7NmhA6vW+Qbqv+ZbsXDqTdue6m/J1R8=
+MCowBQYDK2VwAyEAtf8zUakn1QSP9axXyr3COazJFBRVMpsf8P4PBr4UM4E=
 -----END PUBLIC KEY-----'
 
 die() { echo "host trust: $*" >&2; exit 1; }
