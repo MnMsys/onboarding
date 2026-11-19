@@ -32,7 +32,7 @@ while [ $# -gt 0 ]; do
 done
 [ -f "$CSR" ] || die "--csr <file> is required"
 [ -f "$PKI/host-ca.crt" ] && [ -f "$PKI/host-ca.key" ] || die "--pki must contain host-ca.crt and host-ca.key"
-[[ "$GATEWAY" =~ ^https://[A-Za-z0-9.:-]+$ ]] || die "--gateway must be an https URL, e.g. https://95.216.156.203:9443"
+[[ "$GATEWAY" =~ ^https://[A-Za-z0-9.:-]+$ ]] || die "--gateway must be an https URL, e.g. https://203.0.113.10:9443"
 [[ "$DAYS" =~ ^[0-9]+$ ]] && [ "$DAYS" -ge 1 ] && [ "$DAYS" -le 90 ] || die "--days must be 1..90"
 [[ "$TENANT" =~ ^[a-z0-9][a-z0-9_-]{1,62}$ ]] || die "--tenant is not a valid id"
 

@@ -48,8 +48,8 @@ mnm run container logs <machine-ip> <service> --lines 50
 default). Before it expires, run step 1 again with the same name (your key is kept) and send the
 new request.
 
-`mnm host add` through the entrance needs an `mnm` built with mnms-cli `69a44a1` or later
-(`fix/host-add-tls`): older builds fetch the host document without the CA and client certificate
+`mnm host add` through the entrance needs an `mnm` built with mnms-cli `7bb0095` or later
+(`host add` with the configured CA and client certificate): older builds fetch the host document without the CA and client certificate
 and fail with "error sending request". The bundle's binary has it.
 
 **Not available yet:** `mnm logs follow`, `mnm shell` (live streams are not routed through the
@@ -71,7 +71,7 @@ From the build machine, where the Host CA lives (`~/mnms-keys/pki`):
 
 ```bash
 ./issue-operator-cert.sh --csr jane-doe.csr --pki ~/mnms-keys/pki \
-    --gateway https://95.216.156.203:9443 \
+    --gateway https://203.0.113.10:9443 \
     --mnm ~/mnms-release/mnms-cli/target/release/mnm      # optional, Linux/WSL binary
 ```
 
